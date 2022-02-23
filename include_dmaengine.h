@@ -378,3 +378,14 @@ struct dma_device {
 
 
 
+#define dma_request_channel(mask, x, y) __dma_request_channel(&(mask), x, y)
+
+
+
+
+
+
+
+
+
+
