@@ -70,29 +70,22 @@ static unsigned long long dmatest_persec(s64 runtime, unsigned int val)
 /* 速率 */
 static unsigned long long dmatest_KBs(s64 runtime, unsigned long long len)
 
-/* 主要的测试函数 */
+/** 
+ * 主要的测试函数
+ * 前面都是一些内存申请，初始化内存值的操作
+ * 从 while (!kthread_should_stop() 处开始
+ * 声明了一个描述符 dma_async_tx_descriptor *tx
+ * 从 if (thread->type == DMA_MEMCPY) 
+ * 根据不同的类型调用不同的回调函数（主要是内存到内存）
+ * tx->callback = dmatest_callback;
+ * cookie = tx->tx_submit(tx);
+ * 调用 dma_submit_error(cookie) 对 cookie 值进行判断
+ * 调用 dma_async_issue_pending(chan);
+ * wait_event_freezable_timeout() 等待传输完成
+ * dma_async_is_tx_complete(chan, cookie, NULL, NULL); 判断是否完成
+ * dmaengine_terminate_all(chan); 停止所有通道
+ */
 static int dmatest_func(void *data)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
