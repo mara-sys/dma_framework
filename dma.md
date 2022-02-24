@@ -6,6 +6,8 @@ Documentation
         -->client.txt   #client 使用 dma 的 API 指南
         -->dmatest.txt  #编译、配置、使用 dmatest 系统
         -->provider.txt #dma controller API 指南
+    -->crypto
+        -->async-tx-api.txt
 # 代码
 drivers/dma
     -->dmaengine.c
@@ -34,7 +36,7 @@ linuc/include/linux
 ## 1.6 内核文档翻译
 ### 1.6.1 client.txt
 &emsp;&emsp;注意：有关 async_tx 中 DMA 引擎的使用，请参阅：Documentation/crypto/async-tx-api.txt 
-&emsp;&emsp;下面是设备驱动程序编写者如何使用 DMA 引擎的 Slave-DMA API 的指南。 这仅适用于skave DMA 使用。
+&emsp;&emsp;下面是设备驱动程序编写者如何使用 DMA 引擎的 Slave-DMA API 的指南。 这仅适用于slave DMA 使用。
 &emsp;&emsp;slave DMA 的使用包括以下步骤：
 1. 分配一个 DMA slave 通道
 2. 设置从机和控制器具体参数
@@ -271,9 +273,129 @@ void dma_async_issue_pending(struct dma_chan *chan);
 &emsp;&emsp;虽然这是一个相当低效的设计，因为传输间的延迟不仅是中断延迟，还有 tasklet 的调度延迟，这会使通道处于空闲状态，从而降低全局传输速率。
 &emsp;&emsp;你应该避免这种做法，而不是在你的 tasklet 中选择一个新的传输，而是将该部分移动到中断处理程序，以获得更短的空闲窗口（无论如何我们都无法真正避免）。 
 
+### 1.6.4 async-tx-api.txt
+异步传输/转换 API 
+#### 1.6.4.1 介绍
+&emsp;&emsp;async_tx API 提供了用于描述异步大容量内存传输/转换链的方法，并支持事务间依赖关系。 它被实现为一个 dmaengine 客户端，可以平滑不同硬件卸载引擎实现的细节。 写入 API 的代码可以针对异步操作进行优化，并且 API 将使操作链适合可用的卸载资源。 
+#### 1.6.4.2 GENEALOGY
+&emsp;&emsp;API 最初设计用于使用英特尔(R) Xscale 系列 I/O 处理器中的卸载引擎卸载 md-raid5 驱动程序的内存副本和异或奇偶校验计算。 它还建立在“dmaengine”层之上，该层是为使用英特尔(R) I/OAT 引擎卸载网络堆栈中的内存副本而开发的。 因此，以下设计特征浮出水面： 
+1. 隐式同步路径：API 的用户不需要知道他们运行的平台是否具有卸载功能。 当引擎可用时，该操作将被卸载，否则将在软件中执行。 
+2. 跨通道依赖链：API 允许提交依赖操作链，如 raid5 情况下的 xor->copy->xor。 API 自动处理从一个操作转换到另一个操作意味着硬件通道切换的情况。 
+3. dmaengine 扩展以支持“memcpy”之外的多个客户端和操作类型 
 
+#### 1.6.4.3 用法
+##### 1.6.4.3.1 general format of the API
+```c
+struct dma_async_tx_descriptor *
+async_<operation>(<op specific parameters>, struct async_submit ctl *submit)
+```
+##### 1.6.4.3.2 Supported operations
+* memcpy：源缓冲区和目标缓冲区之间的内存复制 
+* memset：用字节值填充目标缓冲区 
+* xor：xor 一系列源缓冲区并将结果写入目标缓冲区 
+* xor_val：xor 一系列源缓冲区，如果结果为零，则设置一个标志。 该实现防止写入内存 
+* pq：从一系列源缓冲区生成 p+q（raid6 syndrome） 
+* pq_val：验证 p 和或 q 缓冲区是否与给定的一系列源同步 
+* datap：(raid6_datap_recov) 从给定的源恢复一个raid6数据块和p块 
+* 2data：(raid6_2data_recov) 从给定源恢复 2 个 raid6 数据块 
 
+##### 1.6.4.3.3 Descriptor management
+&emsp;&emsp;返回值是<u>非 NULL 并且当操作已进入异步执行队列时指向“描述符”</u>。 描述符是回收的资源，在驱动程序的控制下，将在操作完成时重复使用。 当应用程序需要提交一系列操作时，它必须保证在提交依赖项之前描述符不会自动回收。 这要求应用程序在允许驱动程序回收（或释放）描述符之前确认所有描述符。 可以通过以下方法之一确认描述符： 
+* 如果不提交子操作，则设置 ASYNC_TX_ACK 标志 
+* 将未确认的描述符作为对另一个 async_tx 调用的依赖项提交将隐式设置已确认状态。 
+* 在描述符上调用 async_tx_ack()。
 
+##### 1.6.4.3.4 When does the operation execute
+&emsp;&emsp;async_\<operation\> 调用返回后，操作不会立即发出。 驱动批处理操作，通过减少管理通道所需的 mmio 周期数来提高性能。 一旦达到特定于驱动程序的阈值，驱动程序就会自动发出挂起的操作。 应用程序可以通过调用 async_tx_issue_pending_all() 来强制执行此事件。 这对所有通道都有效，因为应用程序不知道通道到操作的映射。 
+##### 1.6.4.3.5 When does the operation complete
+&emsp;&emsp;应用程序有两种方法可以了解操作的完成情况。 
+1. 调用 dma_wait_for_async_tx()。 此调用导致 CPU 在轮询操作是否完成时旋转。 它处理依赖链和发出挂起的操作。 
+2. 指定一个完成的回调函数。 如果驱动程序支持中断，则回调例程在 tasklet 上下文中运行，或者如果在软件中同步执行操作，则在应用程序上下文中调用它。 回调可以在对 async_\<operation\> 的调用中设置，或者当应用程序需要提交一个未知长度的链时，它可以使用 async_trigger_callback() 例程在链的末尾设置一个完成中断/回调。 
+
+##### 1.6.4.3.6 constraints 约束
+1. 在 IRQ 上下文中不允许调用 async_\<operation\>。 如果不违反约束 #2，则允许其他上下文。 
+2. 完成回调例程不能提交新操作。 这导致<u>同步情况下的递归</u>和<u>异步情况下获得两次 spin_locks</u>。 
+
+##### 1.6.4.3.7 示例
+&emsp;&emsp;执行 xor->copy->xor 操作，其中每个操作取决于前一个操作的结果： 
+```c
+void callback(void *param)
+{
+	struct completion *cmp = param;
+
+	complete(cmp);
+}
+
+void run_xor_copy_xor(struct page **xor_srcs,
+		      int xor_src_cnt,
+		      struct page *xor_dest,
+		      size_t xor_len,
+		      struct page *copy_src,
+		      struct page *copy_dest,
+		      size_t copy_len)
+{
+	struct dma_async_tx_descriptor *tx;
+	addr_conv_t addr_conv[xor_src_cnt];
+	struct async_submit_ctl submit;
+	addr_conv_t addr_conv[NDISKS];
+	struct completion cmp;
+
+	init_async_submit(&submit, ASYNC_TX_XOR_DROP_DST, NULL, NULL, NULL,
+			  addr_conv);
+	tx = async_xor(xor_dest, xor_srcs, 0, xor_src_cnt, xor_len, &submit)
+
+	submit->depend_tx = tx;
+	tx = async_memcpy(copy_dest, copy_src, 0, 0, copy_len, &submit);
+
+	init_completion(&cmp);
+	init_async_submit(&submit, ASYNC_TX_XOR_DROP_DST | ASYNC_TX_ACK, tx,
+			  callback, &cmp, addr_conv);
+	tx = async_xor(xor_dest, xor_srcs, 0, xor_src_cnt, xor_len, &submit);
+
+	async_tx_issue_pending_all();
+
+	wait_for_completion(&cmp);
+}
+```
+&emsp;&emsp;有关标志的更多信息，请参见 include/linux/async_tx.h。 有关更多实现示例，请参阅 drivers/md/raid5.c 中的 ops_run_* 和 ops_complete_* 例程。 
+
+#### 1.6.4.4 驱动程序开发说明 
+##### 1.6.4.4.1 Conformance points
+&emsp;&emsp;dmaengine 驱动程序需要有一些一致性的点来适应应用程序使用 async_tx API 所做的假设： 
+1. Completion callbacks are expected to happen in tasklet context
+   预计完成回调将在 tasklet 上下文中发生 
+2. dma_async_tx_descriptor fields are never manipulated in IRQ context
+   dma_async_tx_descriptor 字段永远不会在 IRQ 上下文中被操作 
+3. 在描述符清理路径中使用 async_tx_run_dependencies() 来处理依赖操作的提交 
+
+##### 1.6.4.4.2 
+&emsp;&emsp;“我的应用程序需要对硬件通道进行独占控制” 这个要求主要源于使用 DMA 引擎驱动程序来支持设备到内存操作的情况。 由于许多平台特定的原因，无法共享执行这些操作的通道。 对于这些情况，提供了 dma_request_channel() 接口。 
+&emsp;&emsp;接口是：
+```c
+struct dma_chan *dma_request_channel(dma_cap_mask_t mask,
+				    dma_filter_fn filter_fn,
+				    void *filter_param);
+```
+&emsp;&emsp;dma_filter_fn 定义如下：
+```c
+typedef bool (*dma_filter_fn)(struct dma_chan *chan, void *filter_param);
+```
+&emsp;&emsp;当可选的 'filter_fn' 参数设置为 NULL 时，dma_request_channel 只返回满足能力掩码的第一个通道。 否则，当掩码参数不足以指定必要的通道时，可以使用 filter_fn 例程来配置系统中的可用通道。 系统中的每个空闲通道都会调用一次 filter_fn 例程。 在看到合适的通道时 filter_fn 返回 DMA_ACK，它将该通道标记为来自 dma_request_channel 的返回值。 通过此接口分配的通道对调用者来说是专有的，直到 dma_release_channel() 被调用。 
+&emsp;&emsp;DMA_PRIVATE 功能标志用于标记不应由通用分配器使用的 dma 设备。 如果知道通道将始终是私有的，则可以在初始化时设置它。 或者，当 dma_request_channel() 找到未使用的“公共”频道时设置它。 
+&emsp;&emsp;在实现驱动程序和消费者时需要注意几点： 
+1. 一旦通道被私有分配，通用分配器将不再考虑它，即使在调用 dma_release_channel() 之后也是如此。 
+2. 由于功能是在设备级别指定的，因此具有多个通道的 dma_device 将具有所有通道公共或所有通道私有。 
+
+#### 1.6.4.4 SOURCE
+```shell
+include/linux/dmaengine.h: core header file for DMA drivers and api users
+drivers/dma/dmaengine.c: offload engine channel management routines
+drivers/dma/: location for offload engine drivers
+include/linux/async_tx.h: core header file for the async_tx api
+crypto/async_tx/async_tx.c: async_tx interface to dmaengine and common code
+crypto/async_tx/async_memcpy.c: copy offload
+crypto/async_tx/async_xor.c: xor and xor zero sum offload
+```
 
 
 
