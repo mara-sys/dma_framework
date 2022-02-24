@@ -140,6 +140,76 @@ void dma_async_issue_pending(struct dma_chan *chan);
 
 
 ### 1.6.2 dmatest.txt
+&emsp;&emsp;这个小文档介绍了如何使用 dmatest 模块测试 DMA 驱动程序。 
+&emsp;&emsp;测试套件仅适用于至少具有以下一项功能的通道：DMA_MEMCPY（内存到内存）、DMA_MEMSET（常量到内存或内存到内存，当模拟时）、DMA_XOR、DMA_PQ。 
+#### 1.6.2.1 How to build the test module
+&emsp;&emsp;menuconfig 包含一个可以通过以下路径找到的选项： 
+```shell
+Device Drivers -> DMA Engine support -> DMA Test client
+```
+&emsp;&emsp;在配置文件中该选项称为 CONFIG_DMATEST。 dmatest 可以构建为模块或内核。 让我们考虑一下这些情况。 
+#### 1.6.2.2 When dmatest is built as a module
+&emsp;&emsp;使用示例 
+```shell
+    % modprobe dmatest channel=dma0chan0 timeout=2000 iterations=1 run=1
+```
+&emsp;&emsp;或：
+```shell
+    % modprobe dmatest
+    % echo dma0chan0 > /sys/module/dmatest/parameters/channel
+    % echo 2000 > /sys/module/dmatest/parameters/timeout
+    % echo 1 > /sys/module/dmatest/parameters/iterations
+    % echo 1 > /sys/module/dmatest/parameters/run
+```
+&emsp;&emsp;或 on the kernel command line：
+```shell
+    dmatest.channel=dma0chan0 dmatest.timeout=2000 dmatest.iterations=1 dmatest.run=1
+```
+&emsp;&emsp;hint：可以通过运行以下命令来提取可用频道列表： 
+```shell
+    % ls -1 /sys/class/dma/
+```
+&emsp;&emsp;一旦启动，就会发出类似“dmatest: Started 1 threads using dma0chan0”的消息。 之后只报告测试失败消息，直到测试停止。 
+&emsp;&emsp;请注意，运行新测试不会停止任何正在进行的测试。
+&emsp;&emsp;以下命令返回测试的状态：
+```shell
+    % cat /sys/module/dmatest/parameters/run
+```
+&emsp;&emsp;要等待测试完成，用户空间可以 poll “run” 直到它为假，或者使用等待参数。 在加载模块时指定 'wait=1' 会导致模块初始化暂停，直到测试运行完成，而读取 /sys/module/dmatest/parameters/wait 会在返回之前等待任何正在运行的测试完成。 例如，以下脚本在退出之前等待 42 次测试完成。 请注意，如果“迭代”设置为“无限”，则禁用等待。 
+&emsp;&emsp;示例：
+```shell
+    % modprobe dmatest run=1 iterations=42 wait=1
+    % modprobe -r dmatest
+```
+&emsp;&emsp;或：
+```shell
+    % modprobe dmatest run=1 iterations=42
+    % cat /sys/module/dmatest/parameters/wait
+    % modprobe -r dmatest
+```
+#### 1.6.2.3 When built-in in the kernel
+&emsp;&emsp;提供给内核命令行的模块参数将用于第一次执行的测试。 用户获得控制后，可以使用相同或不同的参数重新运行测试。 有关详细信息，请参阅上面的“第 2 部分 - 将 dmatest 构建为模块时”部分。 
+&emsp;&emsp;在这两种情况下，模块参数都用作测试用例的实际值。 您总是可以在运行时通过运行检查它们：
+```shell
+    % grep -H . /sys/module/dmatest/parameters/*
+```
+#### 1.6.2.4 Gathering the test results
+&emsp;&emsp;测试结果以以下格式打印到内核日志缓冲区：
+```shell
+    "dmatest: result <channel>: <test id>: '<error msg>' with src_off=<val> dst_off=<val> len=<val> (<err code>)"
+```
+&emsp;&emsp;示例输出：
+```shell
+    % dmesg | tail -n 1
+    dmatest: result dma0chan0-copy0: #1: No errors with src_off=0x7bf dst_off=0x8ad len=0x3fea (0)
+```
+&emsp;&emsp;消息格式在不同类型的错误之间是统一的。 括号中的数字代表附加信息，例如 错误代码、错误计数器或状态。 测试线程还会在完成时发出一个摘要行，列出执行的测试数量、失败的数量和结果代码。 
+&emsp;&emsp;示例：
+```c
+    % dmesg | tail -n 1
+    dmatest: dma0chan0-copy0: summary 1 test, 0 failures 1000 iops 100000 KB/s (0)
+```
+&emsp;&emsp;还会发出数据错误比较错误的详细信息，但不要遵循上述格式。 
 
 ### 1.6.3 provider.txt
 #### 1.6.3.1 硬件介绍
