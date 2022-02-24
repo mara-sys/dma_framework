@@ -76,3 +76,73 @@ static int dmatest_func(void *data)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* 
+ * kthread_create(dmatest_func, thread, "%s-%s%u",
+ *				dma_chan_name(chan), op, i);
+ * 起一个线程调用了 dmatest_func，开始正式进入测试
+ */
+static int dmatest_add_threads(struct dmatest_info *info,
+		struct dmatest_chan *dtc, enum dma_transaction_type type)
+
+/* 
+ * 根据 capability 选择参数调用 dmatest_add_threads
+ * 例如 DMA_MEMCPY，DMA_MEMSET，DMA_XOR，DMA_PQ 等
+ */
+static int dmatest_add_channel(struct dmatest_info *info,
+		struct dma_chan *chan)
+
+/* 
+ * dma_cap_zero(mask);
+ * dma_cap_set(type, mask);
+ * dma_request_channel()
+ * dmatest_add_threads
+ */
+static void request_channels(struct dmatest_info *info,
+			     enum dma_transaction_type type)
+
+/* 对 dmatest_info 成员 dmatest_info 进行赋值，
+ * 就是导出到文件系统的那些参数：timeout，channel，noverify，norandom 等
+ * 然后调用了 request_channels
+ */
+static void run_threaded_test(struct dmatest_info *info)
+
+/* 调用了 dma_release_channel() */
+static void stop_threaded_test(struct dmatest_info *info)
+
+/* 
+ * 先调用 stop_threaded_test() 停用所有正在运行的测试
+ * 再调用 run_threaded_test() 开始进行测试
+ */
+static void restart_threaded_test(struct dmatest_info *info, bool run)
+
+/* 
+ * sysfs 中 run 之后，调用此函数
+ * 然后调用了 restart_threaded_test()
+ */
+static int dmatest_run_set(const char *val, const struct kernel_param *kp)
+
+
+
+
+
+
