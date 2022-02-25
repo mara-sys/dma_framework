@@ -81,6 +81,47 @@ static struct dma_chan *private_candidate(const dma_cap_mask_t *mask,
 					  struct dma_device *dev,
 					  dma_filter_fn fn, void *fn_param)
 
+/**  
+ * 
+ */
+static struct dma_chan *find_candidate(struct dma_device *device,
+				       const dma_cap_mask_t *mask,
+				       dma_filter_fn fn, void *fn_param)
+{
+	struct dma_chan *chan = private_candidate(mask, device, fn, fn_param);
+	int err;
+
+	if (chan) {
+		/* Found a suitable channel, try to grab, prep, and return it.
+		 * We first set DMA_PRIVATE to disable balance_ref_count as this
+		 * channel will not be published in the general-purpose
+		 * allocator
+		 */
+		dma_cap_set(DMA_PRIVATE, device->cap_mask);
+		device->privatecnt++;
+		err = dma_chan_get(chan);
+
+		if (err) {
+			if (err == -ENODEV) {
+				dev_dbg(device->dev, "%s: %s module removed\n",
+					__func__, dma_chan_name(chan));
+				list_del_rcu(&device->global_node);
+			} else
+				dev_dbg(device->dev,
+					"%s: failed to get %s: (%d)\n",
+					 __func__, dma_chan_name(chan), err);
+
+			if (--device->privatecnt == 0)
+				dma_cap_clear(DMA_PRIVATE, device->cap_mask);
+
+			chan = ERR_PTR(err);
+		}
+	}
+
+	return chan ? chan : ERR_PTR(-EPROBE_DEFER);
+}
+
+
 
 /** 
  *  尝试分配一个独占通道
