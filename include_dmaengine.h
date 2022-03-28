@@ -3,8 +3,8 @@
  * ----------------------------
  * 一个 chunk（块）是指：要传输的，地址连续的字节的集合。两个块之间的间隙（gap，
  * 以字节为单位）称为块间间隙（ICG）。ICG 在两个块之间可能会也可能不会发生变化
- * 帧（frame）是连续的 {chunk,icg} pairs 的最小单位，帧重复整数次就指定了一次
- * 传输。一次传输的模板就是由帧的规格、帧的重复次数和别的每次传输的属性构成的。
+ * 帧（frame）是连续的 {chunk,icg} 对的最小单位，帧重复整数次就指定了一次
+ * 传输。一次传输的模板就是由帧的规格、帧的重复次数和其他的每次传输的属性构成的。
  *
  * 实际上，客户端驱动程序在其生命周期中，会为其每种传输类型准备一个模板，并在
  * 提交（submit）请求前仅设置“stc_start”和“dst_start”。
@@ -273,9 +273,8 @@ struct dma_tx_state {
  * 也应检查是否相同。
  * @residue_granularity: granularity of the transfer residue reported
  *	by tx_status
- * @device_alloc_chan_resources: allocate resources and return the
- *	number of allocated descriptors
- * @device_free_chan_resources: release DMA channel's resources
+ * @device_alloc_chan_resources: 申请资源并返回申请的 descriptors 的序号
+ * @device_free_chan_resources: 释放 DMA channel's resources
  * @device_prep_dma_memcpy: prepares a memcpy operation
  * @device_prep_dma_xor: prepares a xor operation
  * @device_prep_dma_xor_val: prepares a xor validation operation
@@ -372,6 +371,87 @@ struct dma_device {
 					    struct dma_tx_state *txstate);
 	void (*device_issue_pending)(struct dma_chan *chan);
 };
+
+/* 将 dma_slave_config 配置到 dma_chan 中 */
+static inline int dmaengine_slave_config(struct dma_chan *chan,
+					  struct dma_slave_config *config)
+
+/* 这中间的一系列函数应该都是 slave 的 */
+
+/* 
+ * 这个应该是我要写的 sys-dma 的 
+ * device_prep_dma_sg 和 device_prep_dma_memcpy 的区别应该一个特殊和一般的区别
+ * sg 是链表，memcpy 是链表的特殊情况，即只有一个链（我的猜想，不确定）
+ */
+static inline struct dma_async_tx_descriptor *dmaengine_prep_dma_sg(
+		struct dma_chan *chan,
+		struct scatterlist *dst_sg, unsigned int dst_nents,
+		struct scatterlist *src_sg, unsigned int src_nents,
+		unsigned long flags)
+{
+	return chan->device->device_prep_dma_sg(chan, dst_sg, dst_nents,
+			src_sg, src_nents, flags);
+}
+
+static inline int dmaengine_terminate_all(struct dma_chan *chan)
+{
+	if (chan->device->device_terminate_all)
+		return chan->device->device_terminate_all(chan);
+
+	return -ENOSYS;
+}
+
+/* 下面一堆函数都是调用了对应的回调函数 */
+static inline int dmaengine_pause(struct dma_chan *chan)
+
+static inline int dmaengine_resume(struct dma_chan *chan)
+
+static inline enum dma_status dmaengine_tx_status(struct dma_chan *chan,
+	dma_cookie_t cookie, struct dma_tx_state *state)
+
+static inline dma_cookie_t dmaengine_submit(struct dma_async_tx_descriptor *desc)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
