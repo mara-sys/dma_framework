@@ -86,8 +86,8 @@ enum dma_ctrl_flags {
 /**
  * struct dma_chan - devices 提供 DMA channels, clients 使用它们
  * @device: 指向提供此通道的 dma 设备的指针，始终为 !%NULL 
- * @cookie: last cookie value returned to client
- * @completed_cookie: last completed cookie for this channel
+ * @cookie: 上一个返回给 client 的 cookie 值
+ * @completed_cookie: 此通道上一个传输完成的 cookie
  * @chan_id: channel ID for sysfs
  * @dev: class device for sysfs
  * @device_node: used to add this to the device chan list
