@@ -44,7 +44,7 @@ static void vchan_complete(unsigned long arg)
 
 /** 
  * 对 virt_dma_chan 的 dma_chan 的 cookie 初始化，值为 1
- * 初始化 virt_dma_chan 的 desc_submitted、desc_issued、desc_completed
+ * 初始化 virt_dma_chan 的链表头 desc_submitted、desc_issued、desc_completed
  * 初始化 tasklet_struct
  * 将 virt_dma_chan 的 dma_chan 的 list_head device_node 添加到 dma_device 
  * 的 list_head channels

@@ -161,3 +161,25 @@ struct dma_chan *__dma_request_channel(const dma_cap_mask_t *mask,
 	return chan;
 }
 EXPORT_SYMBOL_GPL(__dma_request_channel);
+
+
+
+int dma_async_device_register(struct dma_device *device)
+{
+
+    /* 检查对应的能力是否有对应的回调函数 */
+    if (dma_has_cap(DMA_MEMCPY, device->cap_mask) && !device->device_prep_dma_memcpy) {
+    dev_err(device->dev,
+        "Device claims capability %s, but op is not defined\n",
+        "DMA_MEMCPY");
+    return -EIO;
+	}
+
+    /* 检查几个必须存在的回调函数是否存在 
+     * device_tx_status
+     * device_issue_pending
+     */
+
+    /* 导出 sysfs，统计 dma_device_chancnt 的个数*/
+
+}
