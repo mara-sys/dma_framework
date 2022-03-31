@@ -38,9 +38,10 @@ struct virt_dma_desc *vchan_find_desc(struct virt_dma_chan *, dma_cookie_t);
 
 /**
  * vchan_tx_prep - prepare a descriptor
- * vc: virtual channel allocating this descriptor
- * vd: virtual descriptor to prepare
+ * vc: 分配此描述符的虚拟通道 
+ * vd: 准备的虚拟描述符
  * tx_flags: flags argument passed in to prepare function
+ * 
  */
 static inline struct dma_async_tx_descriptor *vchan_tx_prep(struct virt_dma_chan *vc,
 	struct virt_dma_desc *vd, unsigned long tx_flags)
@@ -99,8 +100,8 @@ static inline void vchan_cyclic_callback(struct virt_dma_desc *vd)
 }
 
 /**
- * vchan_next_desc - peek at the next descriptor to be processed
- * vc: virtual channel to obtain descriptor from
+ * vchan_next_desc - 查找下一个要处理的描述符
+ * vc: 获取描述符的虚拟通道 
  *
  * vc.lock must be held by caller
  */
