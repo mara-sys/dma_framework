@@ -21,7 +21,12 @@ linuc/include/linux
 
 
 
-
+## 1.1 框架分析
+### 1.1.1 数据结构
+#### 1.1.1.2 数据结构总览
+<div align=center>
+<img src="dma_framework_images/structure_simple.svg" width="1400">
+</div>  
 
 
 
