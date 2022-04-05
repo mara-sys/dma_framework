@@ -23,15 +23,51 @@ linuc/include/linux
 
 ## 1.1 框架分析
 ### 1.1.1 数据结构
-#### 1.1.1.2 数据结构总览
+#### 1.1.1.1 数据结构总览
 <div align=center>
 <img src="dma_framework_images/structure_simple.svg" width="1400">
-</div>  
+</div>   
 
+&emsp;&emsp;上面的框图分为了四个层级：dma 硬件、linux 下的 dma 框架、驱动 dma 硬件的 provider、其他需要使用到 dma 的驱动（称为 consumer 或 client）。
+1. dma 硬件
+&emsp;&emsp;硬件包括一个 sdma（用于内存间数据传输）和一个 gdma（专门用于图像传输）。其中 sdma 有四个通道。
+2. dma 框架
+* 通用 dma 硬件抽象
+  * `dma_device`：对 dma 硬件进行抽象，此结构体是对大多数 dma 共同具有的一些特征的抽象。
+* 通用物理通道的抽象
+  * `dma_chan`：对物理通道进行抽象，dma_chan 与实际的物理通道是一一对应的。
+  * `dma_async_tx_descriptor`：对通道上一次具体的传输进行控制的描述符。
+* 通用虚拟通道的抽象
+  * `virt_dma_chan`：基于物理通道 dma_chan，又抽象出了虚拟通道。软件会管理这些虚拟通道的传输请求。物理通道与虚拟通道的关系并不是一一对应，而是一个物理通道可以抽象出多个虚拟通道（？？？我怎么觉得是虚拟通道与物理通道也是一一对应的呢，只不过是可以在一个虚拟通道上申请多个传输描述符而已）。
+  * `virt_dma_desc`：既然对物理通道进行了虚拟化，理所当然的也对物理通道传输描述符进行了虚拟化。其实 virt_dma_desc 只是对 dma_async_tx_descriptor 进行了一下简单的包装而已。
 
+3. dma provider
+* 厂家 dma 硬件抽象
+  * `gsdma_engine`：基于 dma_device 和具体硬件，自己抽象出一个结构体，它除了包括 dma_device，还会包括例如基地址、时钟、中断特有的等信息，是对 dma 硬件用到的所有资源的抽象。
+* 厂家通道的抽象
+  * `sdma_channel`、`gdma_channel`：基于 virt_dma_chan 和硬件，定义的自己的通道结构体。其实，在大多数驱动中，同一模块不同通道间的操作逻辑都是相同的，所以只需要抽象一个通道结构体就可以，但是我们的硬件中，虽然 sdma 和 gdma 在同一模块中，但是他们两者的硬件配置逻辑基本不一样，所以就抽象出了两个通道。
+  * `sdma_desc`、`gdma_desc`：基于 virt_dma_desc 抽象出的用于控制上面两类通道的传输描述符。一个通道上可以同时申请多个传输描述符。
 
+4. dma consumer
+&emsp;&emsp;consumer 使用 dma 时，首先会申请一个通道，返回结构体`dma_chan`，接着会在这个物理通道上面申请一个传输描述符，申请成功将此传输描述符挂载到对应通道的队列中，再通过启动传输函数发起传输。
 
+#### 1.1.1.2 数据结构定义
+<div align=center>
+<img src="dma_framework_images/structure_detailed.svg" width="1400">
+</div>   
+&emsp;&emsp;实线表示由箭头起始处的结构体派生出箭头末尾处的结构体，虚线表示包含关系。
 
+#### 1.1.1.3 结构体成员含义
+1. dma_device_list
+&emsp;&emsp;在 dmaengine.c 中，有一个全局变量 dma_device_list，它是整个系统支持的所有 dma_device（系统可能不止一个 dma_device） 的链表，每个 dma_device 的 global_node 节点都会挂载到此链表上。
+
+2. dma_device
+* chancnt：设备支持的通道个数
+* privatecnt：使用 dma_request_channel 申请使用了的通道个数
+* channels：一个 dma 设备中所有 dma_chan 的链表
+* global_node：这个节点会挂载到 dma_device_list。
+
+### 1.1.2 cookie 分析
 
 
 

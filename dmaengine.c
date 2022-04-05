@@ -73,7 +73,7 @@ static void dma_chan_put(struct dma_chan *chan)
 
 /** 
  * 返回一个可用的不繁忙的通道
- * 首先判断：如果 dma_device 通道数大于 1，且是 DMA_PRIVATE 的类型，
+ * 首先判断：如果 dma_device 通道数大于 1，且不是 DMA_PRIVATE 的类型，
  *      如果有一个通道被使用就返回 NULL ？
  * 然后再 dma_device 的 channels list_head 中查找未使用的通道并返回
  */
